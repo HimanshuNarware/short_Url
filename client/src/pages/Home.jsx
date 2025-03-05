@@ -20,7 +20,7 @@ function Home() {
 
   async function fetchApi() {
     try {
-      const response = await axios.post(`${DefaultUrl}/api/url/`, {
+      const response = await axios.post(`${DefaultUrl}api/url/`, {
         url,
         name,
       });
