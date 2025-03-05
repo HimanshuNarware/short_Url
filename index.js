@@ -10,10 +10,11 @@ const { getOriginalUrlController } = require('./Controller/UrlController');
 
 // middleware and router
 const app = express();
+app.use('/api',Api);
 app.use(morgan('combined'))
 app.use(express.json());
 app.use(cors());
-app.use('/api',Api);
+
 app.get('/',(req,res)=>{
     res.send('Home url page')
 })
