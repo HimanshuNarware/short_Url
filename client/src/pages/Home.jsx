@@ -20,7 +20,7 @@ function Home() {
 
   async function fetchApi() {
     try {
-      const response = await axios.post(`${DefaultUrl}/api/url/`, {
+      const response = await axios.post(`${DefaultUrl}api/url/`, {
         url,
         name,
       });
@@ -52,7 +52,6 @@ function Home() {
             type="text"
             placeholder="result"
             value={result || ''}
-            style={{ color: 'black' }}
           />
           {/* <p className='pera'>Click ! on shorten to get the result...</p> */}
           <button className="submit" onClick={handleSubmit}>
