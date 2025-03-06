@@ -52,7 +52,7 @@ function Home() {
             type="text"
             placeholder="result"
             value={result || ''}
-            style={{ color: 'black' }}
+  
           />
           {/* <p className='pera'>Click ! on shorten to get the result...</p> */}
           <button className="submit" onClick={handleSubmit}>
