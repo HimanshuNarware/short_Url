@@ -1,64 +1,114 @@
 /** @format */
 
 import React, { useRef, useState } from 'react';
-import './home.css';
 import axios from 'axios';
+import toast from 'react-hot-toast';
+import './home.css';
 
 function Home() {
   const [url, setUrls] = useState('');
   const [result, setResult] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const name = 'website';
   const ref = useRef(null);
 
-  function handleSubmit(e) {
-    e.preventDefault();
-    setUrls(ref.current.value);
-    fetchApi();
-  }
-
   const DefaultUrl = process.env.REACT_APP_BACKEND_URL;
 
-  async function fetchApi() {
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!ref.current.value) {
+      toast.error('Please enter a URL');
+      return;
+    }
+
+    setUrls(ref.current.value);
+    setIsLoading(true);
+
     try {
       const response = await axios.post(`${DefaultUrl}api/url/`, {
-        url,
+        url: ref.current.value,
         name,
       });
 
-      if (!response.data.message.nnid) return;
+      if (!response.data.message.nnid) {
+        toast.error('Invalid response from server');
+        return;
+      }
 
-      console.log(response.data.message.nnid);
-      setResult(DefaultUrl + '/' + response.data.message.nnid);
+      const shortUrl = DefaultUrl + '/' + response.data.message.nnid;
+      setResult(shortUrl);
+      toast.success('URL shortened successfully!');
     } catch (e) {
-      console.log('error in the request', e.message);
+      toast.error('Error shortening URL');
+      console.error('Error:', e.message);
+    } finally {
+      setIsLoading(false);
     }
   }
 
-  return (
-    <div className="Home">
-      <h1 className="heading">URL Shortener</h1>
-      <div className="container">
-        <form action="">
-          <label htmlFor="url">Paste the URL to be shortened</label>
+  const handleCopy = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(result);
+      toast.success('Copied to clipboard!');
+    } catch (err) {
+      toast.error('Failed to copy');
+    }
+  };
 
-          <input
-            type="text"
-            id="url"
-            name="url"
-            placeholder="Enter URL"
-            ref={ref}
-          />
-          <input
-            type="text"
-            placeholder="result"
-            value={result || ''}
-  
-          />
-          {/* <p className='pera'>Click ! on shorten to get the result...</p> */}
-          <button className="submit" onClick={handleSubmit}>
-            Shorten
-          </button>
-        </form>
+  return (
+    <div className="home-container">
+      <div className="content-wrapper">
+        <h1 className="main-title">
+          URL Shortener
+        </h1>
+
+        <div className="form-container">
+          <form onSubmit={handleSubmit} className="url-form">
+            <div className="form-content">
+              <label htmlFor="url" className="url-label">
+                Paste the URL to be shortened
+              </label>
+
+              <div className="input-group">
+                <input
+                  type="url"
+                  id="url"
+                  ref={ref}
+                  className="url-input"
+                  placeholder="Enter URL"
+                />
+
+                <input
+                  type="text"
+                  readOnly
+                  onClick={handleCopy}
+                  className="result-input"
+                  placeholder="Your shortened URL will appear here"
+                  value={result || ''}
+                  title={result ? 'Click to copy' : ''}
+                />
+              </div>
+
+              <div className="button-container">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="submit-button"
+                >
+                  {isLoading ? (
+                    <div className="loading-spinner">
+                      <div className="spinner"></div>
+                      <span>Processing...</span>
+                    </div>
+                  ) : (
+                    'Shorten'
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
