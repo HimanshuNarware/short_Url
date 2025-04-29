@@ -47,7 +47,7 @@ const Footer = () => {
         <div className="feature-box"> <h3 className="hover-green">Devices</h3> <p>Compatible with smartphones, tablets and desktops</p> </div>
       </div>
 
-      {/* Information Section */}
+      {/* Information Section
       <div className="footer-info">
         <div className="footer-section">
           <h4>Company</h4>
@@ -88,7 +88,7 @@ const Footer = () => {
             <li><a href="#" onClick={handleFeatureClick}>Security</a></li>
           </ul>
         </div>
-      </div>
+      </div> */}
 
       {/* Bottom Section */}
       <div className="footer-bottom">
