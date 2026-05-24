@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Footer from './Footer';
@@ -11,8 +11,8 @@ function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentUrls, setRecentUrls] = useState([]);
   const [profile, setProfile] = useState({
-    name: 'Steve',
-    level: 42,
+    name: 'Himanshu',
+    level: 1,
     avatar: '👨‍🌾',
   });
 
@@ -148,17 +148,16 @@ function Home() {
     }
   };
 
-  const refreshAll = useCallback(() => {
+ useEffect(() => {
   fetchRecentUrls();
   fetchStats();
   fetchProfile();
   fetchSystemSettings();
   fetchApiKeys();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
-useEffect(() => {
-  refreshAll();
-}, [refreshAll]);
+ 
   // Set up periodic logs to make the terminal look active
   useEffect(() => {
     const timer = setInterval(() => {
