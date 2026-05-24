@@ -16,8 +16,8 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-    origin:'https://short-url-server-rho.vercel.app/',
-    credentials: true // Required for cookies to be sent cross-origin
+    origin: 'https://short-url-tau-rose.vercel.app',
+    credentials: true
 }));
 
 // Routes
