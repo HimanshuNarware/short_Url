@@ -148,18 +148,17 @@ function Home() {
     }
   };
 
-  const refreshAll = () => {
-    fetchRecentUrls();
-    fetchStats();
-    fetchProfile();
-    fetchSystemSettings();
-    fetchApiKeys();
-  };
+  const refreshAll = useCallback(() => {
+  fetchRecentUrls();
+  fetchStats();
+  fetchProfile();
+  fetchSystemSettings();
+  fetchApiKeys();
+}, []);
 
-  useEffect(() => {
-    refreshAll();
-  }, []);
-
+useEffect(() => {
+  refreshAll();
+}, [refreshAll]);
   // Set up periodic logs to make the terminal look active
   useEffect(() => {
     const timer = setInterval(() => {
