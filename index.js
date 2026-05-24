@@ -16,7 +16,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-    origin:'*',
+    origin:'short-url-tau-rose.vercel.app',
     credentials: true // Required for cookies to be sent cross-origin
 }));
 
