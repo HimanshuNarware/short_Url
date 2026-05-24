@@ -12,7 +12,9 @@ const { getOriginalUrlController } = require('./Controller/UrlController');
 const app = express();
 // app.use(morgan('common'))
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin:"https://short-url-tau-rose.vercel.app"
+}));
 
 app.get('/',(req,res)=>{
     res.send('Home url page')
