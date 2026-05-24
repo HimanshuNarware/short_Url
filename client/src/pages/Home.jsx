@@ -147,8 +147,15 @@ function Home() {
       console.error('Error fetching global stats:', err);
     }
   };
+const refreshAll = () => {
+  fetchRecentUrls();
+  fetchStats();
+  fetchProfile();
+  fetchSystemSettings();
+  fetchApiKeys();
+};
 
- useEffect(() => {
+useEffect(() => {
   fetchRecentUrls();
   fetchStats();
   fetchProfile();
@@ -156,7 +163,6 @@ function Home() {
   fetchApiKeys();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
-
  
   // Set up periodic logs to make the terminal look active
   useEffect(() => {
