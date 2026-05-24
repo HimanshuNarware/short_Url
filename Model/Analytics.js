@@ -18,7 +18,10 @@ const analyticsSchema = mongoose.Schema({
     timestamp: {
         type: Date,
         default: Date.now
-    }
+    },
+    os:String,
+    browser:String,
+    
 }, {
     timestamps: true
 });

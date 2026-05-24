@@ -29,6 +29,15 @@ const urlSchema = mongoose.Schema({
         type: Number,
         default: 0
     },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: false // allow legacy URLs without user
+    },
+    analytics: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Analytics'
+    },
     clicksHistory: [clickHistorySchema]
 }, {
     timestamps: true

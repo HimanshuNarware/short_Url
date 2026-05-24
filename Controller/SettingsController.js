@@ -1,13 +1,18 @@
 const Profile = require('../Model/Profile');
 const SystemSettings = require('../Model/SystemSettings');
-const ApiKey = require('../Model/ApiKey');
 const { success, error } = require('../Utils/ResponseWrapper');
 
 const getProfileController = async (req, res) => {
     try {
-        let profile = await Profile.findOne();
+        const query = req.user ? { userId: req.user.id } : { userId: null };
+        let profile = await Profile.findOne(query);
         if (!profile) {
-            profile = await Profile.create({ name: 'Steve', level: 42, avatar: '👨‍🌾' });
+            profile = await Profile.create({
+                userId: req.user ? req.user.id : null,
+                name: req.user ? req.user.username : 'Crafter',
+                level: 1,
+                avatar: '👨‍🌾'
+            });
         }
         return res.send(success(200, profile));
     } catch (e) {
@@ -18,9 +23,10 @@ const getProfileController = async (req, res) => {
 const updateProfileController = async (req, res) => {
     try {
         const { name, level, avatar } = req.body;
-        let profile = await Profile.findOne();
+        const query = req.user ? { userId: req.user.id } : { userId: null };
+        let profile = await Profile.findOne(query);
         if (!profile) {
-            profile = new Profile();
+            profile = new Profile({ userId: req.user ? req.user.id : null });
         }
         if (name !== undefined) profile.name = name;
         if (level !== undefined) profile.level = level;
@@ -34,9 +40,10 @@ const updateProfileController = async (req, res) => {
 
 const getSystemSettingsController = async (req, res) => {
     try {
-        let settings = await SystemSettings.findOne();
+        const query = req.user ? { userId: req.user.id } : { userId: null };
+        let settings = await SystemSettings.findOne(query);
         if (!settings) {
-            settings = await SystemSettings.create({});
+            settings = await SystemSettings.create({ userId: req.user ? req.user.id : null });
         }
         return res.send(success(200, settings));
     } catch (e) {
@@ -46,10 +53,15 @@ const getSystemSettingsController = async (req, res) => {
 
 const updateSystemSettingsController = async (req, res) => {
     try {
-        const { rateLimit, burstAllowance, smartThrottling, dnsChecks, malwareFiltering, deepAnalysis, resolutionReplicas, analyticsReplicas } = req.body;
-        let settings = await SystemSettings.findOne();
+        const {
+            rateLimit, burstAllowance, smartThrottling,
+            dnsChecks, malwareFiltering, deepAnalysis,
+            resolutionReplicas, analyticsReplicas
+        } = req.body;
+        const query = req.user ? { userId: req.user.id } : { userId: null };
+        let settings = await SystemSettings.findOne(query);
         if (!settings) {
-            settings = new SystemSettings();
+            settings = new SystemSettings({ userId: req.user ? req.user.id : null });
         }
         if (rateLimit !== undefined) settings.rateLimit = rateLimit;
         if (burstAllowance !== undefined) settings.burstAllowance = burstAllowance;
@@ -66,57 +78,9 @@ const updateSystemSettingsController = async (req, res) => {
     }
 };
 
-const getApiKeysController = async (req, res) => {
-    try {
-        const keys = await ApiKey.find().sort({ createdAt: -1 });
-        if (keys.length === 0) {
-            const defaultKeys = [
-                { name: 'Mobile_Prod_App', key: 'xk92', lastUsed: '2 min ago', status: 'ACTIVE' },
-                { name: 'Staging_Local', key: '99ar', lastUsed: '--', status: 'REVOKED' },
-            ];
-            const inserted = await ApiKey.insertMany(defaultKeys);
-            return res.send(success(200, inserted));
-        }
-        return res.send(success(200, keys));
-    } catch (e) {
-        return res.send(error(500, e.message));
-    }
-};
-
-const createApiKeyController = async (req, res) => {
-    try {
-        const { name, key } = req.body;
-        if (!name) {
-            return res.send(error(400, 'Name is required'));
-        }
-        const generatedKey = key || Math.random().toString(36).substring(2, 6);
-        const newKey = await ApiKey.create({
-            name,
-            key: generatedKey,
-            status: 'ACTIVE'
-        });
-        return res.send(success(200, newKey));
-    } catch (e) {
-        return res.send(error(500, e.message));
-    }
-};
-
-const deleteApiKeyController = async (req, res) => {
-    try {
-        const { id } = req.params;
-        await ApiKey.findByIdAndDelete(id);
-        return res.send(success(200, 'API key deleted successfully'));
-    } catch (e) {
-        return res.send(error(500, e.message));
-    }
-};
-
 module.exports = {
     getProfileController,
     updateProfileController,
     getSystemSettingsController,
     updateSystemSettingsController,
-    getApiKeysController,
-    createApiKeyController,
-    deleteApiKeyController
 };

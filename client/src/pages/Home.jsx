@@ -1,10 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import Footer from './Footer';
 import './home.css';
 
-function Home() {
+function Home({ user, setUser, api }) {
   const [result, setResult] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -42,29 +41,43 @@ function Home() {
     dailyClicks: { MON: 0, TUE: 0, WED: 0, THU: 0, FRI: 0, SAT: 0, SUN: 0 }
   });
 
-  // Access tokens list
-  const [accessTokens, setAccessTokens] = useState([
-    { name: 'Mobile_Prod_App', key: 'xk92', created: '2023-11-12', lastUsed: '2 min ago', status: 'ACTIVE' },
-    { name: 'Staging_Local', key: '99ar', created: '2024-01-05', lastUsed: '--', status: 'REVOKED' },
-  ]);
+  // Auth modal state (shown only when clicking Login to Upgrade)
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMsg, setAuthMsg] = useState(null);
+
+  // Premium plan state
+  const [planInfo, setPlanInfo] = useState(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgradeMsg, setUpgradeMsg] = useState(null);
+
+  // Confirm/input modals
+  const [confirmModal, setConfirmModal] = useState(null); // { msg, onConfirm }
+  const [inputModal, setInputModal] = useState(null);     // { label, placeholder, onConfirm }
+  const [inputModalValue, setInputModalValue] = useState('');
 
   // Terminal Log state
   const [terminalLogs, setTerminalLogs] = useState([
     '[08:22:11] INFO: Pulling new layer: craft-core-v2.4.1',
     '[08:22:14] WARN: Node 02 latency > 40ms',
-    '[08:22:15] AUTH: New API Key generated for UID: 10293',
+    '[08:22:15] AUTH: JWT token validated for session',
     '[08:22:19] INFO: Resolution-svc scaled to 8 replicas',
   ]);
 
   const ref = useRef(null);
   const modalRef = useRef(null);
 
-  const rawUrl = process.env.REACT_APP_BACKEND_URL || '';
-  const backendUrl = rawUrl ? (rawUrl.endsWith('/') ? rawUrl : `${rawUrl}/`) : '/';
+  const backendUrl = process.env.REACT_APP_BACKEND_URL
+    ? (process.env.REACT_APP_BACKEND_URL.endsWith('/') ? process.env.REACT_APP_BACKEND_URL : `${process.env.REACT_APP_BACKEND_URL}/`)
+    : '/';
 
   const fetchProfile = async () => {
     try {
-      const response = await axios.get(`${backendUrl}api/settings/profile`);
+      const response = await api.get(`/api/settings/profile`);
       if (response.data.status === 'ok') {
         setProfile(response.data.message);
       }
@@ -75,7 +88,7 @@ function Home() {
 
   const saveProfile = async (updatedProfile) => {
     try {
-      await axios.put(`${backendUrl}api/settings/profile`, updatedProfile);
+      await api.put(`/api/settings/profile`, updatedProfile);
     } catch (err) {
       console.error('Error saving profile:', err);
     }
@@ -83,7 +96,7 @@ function Home() {
 
   const fetchSystemSettings = async () => {
     try {
-      const response = await axios.get(`${backendUrl}api/settings/system`);
+      const response = await api.get(`/api/settings/system`);
       if (response.data.status === 'ok') {
         const s = response.data.message;
         if (s.rateLimit !== undefined) setRateLimit(s.rateLimit);
@@ -102,26 +115,24 @@ function Home() {
 
   const saveSystemSettings = async (updates) => {
     try {
-      await axios.put(`${backendUrl}api/settings/system`, updates);
+      await api.put(`/api/settings/system`, updates);
     } catch (err) {
       console.error('Error saving settings:', err);
     }
   };
 
-  const fetchApiKeys = async () => {
+  const fetchPlan = async () => {
     try {
-      const response = await axios.get(`${backendUrl}api/settings/keys`);
-      if (response.data.status === 'ok') {
-        setAccessTokens(response.data.message);
-      }
+      const response = await api.get(`/api/auth/plan`);
+      if (response.data.status === 'ok') setPlanInfo(response.data.message);
     } catch (err) {
-      console.error('Error fetching API keys:', err);
+      console.error('Error fetching plan:', err);
     }
   };
 
   const fetchRecentUrls = async () => {
     try {
-      const response = await axios.get(`${backendUrl}api/url/recent`);
+      const response = await api.get(`/api/url/recent`);
       if (response.data.status === 'ok') {
         setRecentUrls(response.data.message || []);
       }
@@ -132,7 +143,7 @@ function Home() {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get(`${backendUrl}api/url/stats`);
+      const response = await api.get(`/api/url/stats`);
       if (response.data.status === 'ok') {
         setStats(response.data.message || {
           totalClicks: 0,
@@ -147,22 +158,27 @@ function Home() {
       console.error('Error fetching global stats:', err);
     }
   };
-const refreshAll = () => {
-  fetchRecentUrls();
-  fetchStats();
-  fetchProfile();
-  fetchSystemSettings();
-  fetchApiKeys();
-};
 
-useEffect(() => {
-  fetchRecentUrls();
-  fetchStats();
-  fetchProfile();
-  fetchSystemSettings();
-  fetchApiKeys();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+  const refreshAll = () => {
+    fetchRecentUrls();
+    fetchStats();
+    fetchProfile();
+    fetchSystemSettings();
+    fetchPlan();
+  };
+
+  useEffect(() => {
+    fetchRecentUrls();
+    fetchStats();
+    fetchProfile();
+    fetchSystemSettings();
+    fetchPlan();
+    // Seed profile name from user token if available
+    if (user && user.username) {
+      setProfile(prev => ({ ...prev, name: prev.name === 'Himanshu' ? user.username : prev.name }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
  
   // Set up periodic logs to make the terminal look active
   useEffect(() => {
@@ -194,7 +210,7 @@ useEffect(() => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${backendUrl}api/url/`, {
+      const response = await api.post(`/api/url/`, {
         url: inputValue,
         name: 'website',
       });
@@ -235,19 +251,16 @@ useEffect(() => {
 
   const handleDelete = async (nnid) => {
     try {
-      const response = await axios.delete(`${backendUrl}api/url/${nnid}`);
+      const response = await api.delete(`/api/url/${nnid}`);
       if (response.data.status === 'ok') {
         toast.success('URL deleted successfully');
         refreshAll();
-        if (result.endsWith(nnid)) {
-          setResult('');
-        }
+        if (result.endsWith(nnid)) setResult('');
       } else {
         toast.error('Failed to delete URL');
       }
     } catch (error) {
       toast.error('Error deleting URL');
-      console.error('Error deleting:', error);
     }
   };
 
@@ -256,10 +269,14 @@ useEffect(() => {
       toast.error('Inventory is already empty!');
       return;
     }
-    if (window.confirm('Are you sure you want to mass delete all URLs from the chest?')) {
-      recentUrls.forEach(url => handleDelete(url.nnid));
-      toast.success('Cleared all items!');
-    }
+    setConfirmModal({
+      msg: 'Mass delete ALL URLs from the chest? This cannot be undone.',
+      onConfirm: () => {
+        recentUrls.forEach(url => handleDelete(url.nnid));
+        toast.success('Cleared all items!');
+        setConfirmModal(null);
+      }
+    });
   };
 
   const handleMassExport = () => {
@@ -277,44 +294,25 @@ useEffect(() => {
     toast.success('Inventory chest exported successfully!');
   };
 
-  const generateNewSecret = async () => {
-    const nameInput = prompt("Enter Key Name:", "Mobile_Prod_App");
-    if (!nameInput) return;
+  const handleUpgradePlan = async () => {
+    if (user?.isGuest) {
+      setUpgradeMsg({ type: 'error', text: 'Guests cannot upgrade. Create a full account first.' });
+      return;
+    }
+    setUpgrading(true);
+    setUpgradeMsg(null);
     try {
-      const response = await axios.post(`${backendUrl}api/settings/keys`, { name: nameInput });
-      if (response.data.status === 'ok') {
-        fetchApiKeys();
-        toast.success('Generated new API key successfully!');
+      const res = await api.post('/api/auth/plan/upgrade');
+      if (res.data.status === 'ok') {
+        setUpgradeMsg({ type: 'success', text: '🎉 Upgraded to Master Crafter Premium!' });
+        fetchPlan();
       } else {
-        toast.error('Failed to generate API key');
+        setUpgradeMsg({ type: 'error', text: res.data.message || 'Upgrade failed.' });
       }
     } catch (err) {
-      toast.error('Error generating API key');
-      console.error(err);
-    }
-  };
-
-  const deleteToken = async (id) => {
-    if (window.confirm('Delete this API access token?')) {
-      try {
-        if (typeof id === 'string' && id.length === 24) {
-          const response = await axios.delete(`${backendUrl}api/settings/keys/${id}`);
-          if (response.data.status === 'ok') {
-            fetchApiKeys();
-            toast.success('Access token revoked!');
-          } else {
-            toast.error('Failed to revoke access token');
-          }
-        } else {
-          const updated = [...accessTokens];
-          updated.splice(id, 1);
-          setAccessTokens(updated);
-          toast.success('Access token revoked!');
-        }
-      } catch (err) {
-        toast.error('Error revoking token');
-        console.error(err);
-      }
+      setUpgradeMsg({ type: 'error', text: 'Could not process upgrade. Try again.' });
+    } finally {
+      setUpgrading(false);
     }
   };
 
@@ -490,8 +488,14 @@ useEffect(() => {
               </div>
             </div>
             <div>
-              <div className="font-bold text-sm text-white">{profile.name}</div>
-              <div className="text-[10px] text-[#A19FA3] font-mono">Level {profile.level} Link Crafter</div>
+              <div className="font-bold text-sm text-white">{user?.username || profile.name}</div>
+              <div className="text-[10px] text-[#A19FA3] font-mono">
+                Level {profile.level} Link Crafter
+                {user?.isGuest && <span className="ml-1 text-[#FFC107]">· GUEST</span>}
+              </div>
+              {(planInfo?.currentPlan || user?.plan) === 'premium' && (
+                <div className="text-[9px] font-mono text-[#FFC107] mt-0.5">⭐ Master Crafter</div>
+              )}
             </div>
           </div>
 
@@ -550,34 +554,36 @@ useEffect(() => {
               }`}
             >
               <i className="fa-solid fa-shield-halved w-5 text-center"></i>
-              <span className="font-mono text-sm uppercase">API & Security</span>
+              <span className="font-mono text-sm uppercase">Advance Option</span>
             </button>
           </nav>
         </div>
 
         {/* Sidebar Footer */}
         <div className="space-y-2 border-t border-[#262428] pt-4">
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 p-3 border-2 border-black transition-all ${
-              activeTab === 'settings'
-                ? 'bg-[#5aa02c] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                : 'bg-transparent text-[#A19FA3] hover:text-white border-transparent'
-            }`}
-          >
-            <i className="fa-solid fa-gear w-5 text-center"></i>
-            <span className="font-mono text-sm uppercase">Settings</span>
-          </button>
 
-          <button
-            onClick={() => {
-              toast.error('Session ended. Server status: normal.');
-            }}
-            className="w-full flex items-center gap-3 p-3 text-[#A19FA3] hover:text-red-400 bg-transparent border-transparent transition-all"
-          >
-            <i className="fa-solid fa-right-from-bracket w-5 text-center"></i>
-            <span className="font-mono text-sm uppercase">Logout</span>
-          </button>
+
+          {user ? (
+            <button
+              onClick={async () => {
+                try { await api.post('/api/auth/logout'); } catch (_) {}
+                setUser(null);
+                toast.success('Logged out. See you next time!');
+              }}
+              className="w-full flex items-center gap-3 p-3 text-[#A19FA3] hover:text-red-400 bg-transparent border-transparent transition-all"
+            >
+              <i className="fa-solid fa-right-from-bracket w-5 text-center"></i>
+              <span className="font-mono text-sm uppercase">Logout</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => { setShowAuthModal(true); setAuthMode('login'); setAuthMsg(null); }}
+              className="w-full flex items-center gap-3 p-3 text-[#A19FA3] hover:text-[#5aa02c] bg-transparent border-transparent transition-all"
+            >
+              <i className="fa-solid fa-right-to-bracket w-5 text-center"></i>
+              <span className="font-mono text-sm uppercase">Login</span>
+            </button>
+          )}
         </div>
       </aside>
 
@@ -610,13 +616,13 @@ useEffect(() => {
               <i className="fa-solid fa-user-gear text-lg"></i>
             </button>
 
-            <button
+            {/* <button
               onClick={() => setActiveTab('settings')}
               className="text-[#A19FA3] hover:text-[#5aa02c] transition-colors"
               title="App Settings"
             >
               <i className="fa-solid fa-sliders text-lg"></i>
-            </button>
+            </button> */}
           </div>
         </header>
 
@@ -1312,12 +1318,12 @@ useEffect(() => {
             </div>
           )}
 
-          {/* TAB 4: API & SECURITY (SYSTEM CONTROLS) */}
+          {/* TAB 4: ADVANCE OPTION (SYSTEM CONTROLS) */}
           {activeTab === 'api_security' && (
             <div className="space-y-6 animate-slide-up">
               <div className="select-none border-b-4 border-black pb-4">
                 <h2 className="text-2xl font-bold font-mono text-[#5aa02c] uppercase tracking-wider">
-                  SYSTEM CONTROLS
+                  ADVANCE OPTION
                 </h2>
                 <p className="text-xs text-[#A19FA3] font-mono mt-1">
                   Manage global API rate limits, Docker clusters, and validation protocols.
@@ -1331,7 +1337,7 @@ useEffect(() => {
                   <div>
                     <div className="flex items-center justify-between border-b border-[#262428] pb-3 mb-4">
                       <h3 className="text-sm font-bold font-mono text-white uppercase tracking-wider flex items-center gap-2">
-                        <i className="fa-solid fa-cubes text-[#5aa02c]"></i> DOCKER_RESOURCES
+                        <i className="fa-solid fa-cubes text-[#5aa02c]"></i> SERVICE_STATUS
                       </h3>
                       <div className="flex gap-2">
                         <span className="bg-[#5aa02c] text-black text-[9px] font-extrabold font-mono px-2 py-0.5 border border-black shadow-[1px_1px_0px_rgba(0,0,0,1)]">
@@ -1532,69 +1538,111 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Bottom Wide Card: Access Tokens */}
-              <div className="bg-[#1c1b1e] border-4 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] select-none">
-                <div className="flex items-center justify-between border-b border-[#262428] pb-3 mb-4">
+              {/* Premium Plan Section */}
+              <div className="bg-[#1c1b1e] border-4 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex items-center justify-between border-b border-[#262428] pb-3 mb-6">
                   <div>
-                    <h3 className="text-base font-bold font-mono text-white uppercase tracking-wider">
-                      Access_Tokens
-                    </h3>
-                    <p className="text-[10px] font-mono text-[#A19FA3] mt-0.5">
-                      Active development and production keys.
-                    </p>
+                    <h3 className="text-base font-bold font-mono text-white uppercase tracking-wider">Premium_Plan</h3>
+                    <p className="text-[10px] font-mono text-[#A19FA3] mt-0.5">Upgrade to unlock the full crafting arsenal.</p>
                   </div>
-                  <button
-                    onClick={generateNewSecret}
-                    className="bg-[#00BCD4] hover:bg-[#26c6da] text-black font-extrabold px-4 py-2 border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] active:translate-y-[1.5px] transition-all font-mono text-xs"
-                  >
-                    Generate_New_Secret
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[9px] font-extrabold font-mono px-3 py-1 border-2 ${
+                      (planInfo?.currentPlan || user?.plan) === 'premium'
+                        ? 'bg-[#FFC107] text-black border-[#FFC107]'
+                        : 'bg-[#262428] text-[#A19FA3] border-[#262428]'
+                    }`}>
+                      {((planInfo?.currentPlan || user?.plan) === 'premium') ? '⭐ MASTER_CRAFTER' : 'FREE TIER'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-[#262428] text-[#A19FA3]">
-                        <th className="py-2.5 uppercase tracking-wider text-[10px]">Name</th>
-                        <th className="py-2.5 uppercase tracking-wider text-[10px]">Key_Identifier</th>
-                        <th className="py-2.5 uppercase tracking-wider text-[10px]">Created</th>
-                        <th className="py-2.5 uppercase tracking-wider text-[10px]">Last_Used</th>
-                        <th className="py-2.5 uppercase tracking-wider text-[10px]">Status</th>
-                        <th className="py-2.5 uppercase tracking-wider text-[10px] text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#262428]/40">
-                      {accessTokens.map((tok, idx) => (
-                        <tr key={tok._id || idx} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3 text-white font-bold">{tok.name}</td>
-                          <td className="py-3 text-[#A19FA3]">••••••••{tok.key}</td>
-                          <td className="py-3 text-[#A19FA3]">
-                            {tok.createdAt ? new Date(tok.createdAt).toISOString().split('T')[0] : (tok.created || '--')}
-                          </td>
-                          <td className="py-3 text-[#A19FA3]">{tok.lastUsed || '--'}</td>
-                          <td className="py-3">
-                            <span className={`px-2 py-0.5 text-[9px] font-extrabold border ${
-                              tok.status === 'ACTIVE'
-                                ? 'border-[#5aa02c] text-[#5aa02c] bg-[#5aa02c]/5'
-                                : 'border-[#A19FA3] text-[#A19FA3] bg-transparent'
-                            }`}>
-                              {tok.status}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            <button
-                              onClick={() => deleteToken(tok._id || idx)}
-                              className="text-[#FF8A80] hover:text-red-400 p-1"
-                              title="Revoke Token"
-                            >
-                              <i className="fa-solid fa-trash-can"></i>
-                            </button>
-                          </td>
-                        </tr>
+                {upgradeMsg && (
+                  <div className={`mb-4 p-3 border-2 flex items-start gap-2 font-mono text-xs ${
+                    upgradeMsg.type === 'error'
+                      ? 'border-[#FF8A80] bg-[#FF8A80]/10 text-[#FF8A80]'
+                      : 'border-[#5aa02c] bg-[#5aa02c]/10 text-[#5aa02c]'
+                  }`}>
+                    <i className={`fa-solid mt-0.5 shrink-0 ${upgradeMsg.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}`}></i>
+                    <span>{upgradeMsg.text}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Free Plan */}
+                  <div className={`border-4 p-5 ${
+                    (planInfo?.currentPlan || user?.plan) !== 'premium'
+                      ? 'border-[#5aa02c] shadow-[4px_4px_0px_0px_rgba(90,160,44,0.4)]'
+                      : 'border-[#262428]'
+                  }`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="font-mono font-extrabold text-white uppercase text-sm">Crafter</h4>
+                        <p className="text-[10px] font-mono text-[#A19FA3]">Free Forever</p>
+                      </div>
+                      <span className="text-2xl font-black font-mono text-[#A19FA3]">$0</span>
+                    </div>
+                    <ul className="space-y-2">
+                      {['Up to 15 shortened URLs','7-day analytics retention','Basic click tracking','Community support'].map(f => (
+                        <li key={f} className="flex items-start gap-2 text-[10px] font-mono text-[#A19FA3]">
+                          <i className="fa-solid fa-check text-[#5aa02c] mt-0.5 shrink-0"></i>{f}
+                        </li>
                       ))}
-                    </tbody>
-                  </table>
+                    </ul>
+                    {(planInfo?.currentPlan || user?.plan) !== 'premium' && (
+                      <div className="mt-4 text-[9px] font-mono text-[#5aa02c] font-bold uppercase text-center border border-[#5aa02c] py-1">Current Plan</div>
+                    )}
+                  </div>
+
+                  {/* Premium Plan */}
+                  <div className={`border-4 p-5 relative overflow-hidden ${
+                    (planInfo?.currentPlan || user?.plan) === 'premium'
+                      ? 'border-[#FFC107] shadow-[4px_4px_0px_0px_rgba(255,193,7,0.4)]'
+                      : 'border-[#262428]'
+                  }`}>
+                    <div className="absolute top-0 right-0 bg-[#FFC107] text-black text-[9px] font-extrabold font-mono px-2 py-0.5">
+                      BEST VALUE
+                    </div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="font-mono font-extrabold text-[#FFC107] uppercase text-sm">Master Crafter</h4>
+                        <p className="text-[10px] font-mono text-[#A19FA3]">Full Arsenal Unlocked</p>
+                      </div>
+                      <span className="text-2xl font-black font-mono text-[#FFC107]">$9.99<span className="text-xs text-[#A19FA3]">/mo</span></span>
+                    </div>
+                    <ul className="space-y-2">
+                      {['Unlimited shortened URLs','365-day analytics retention','Advanced analytics & heatmaps','Custom domain support','API access (high rate limits)','Priority support','Password-protected links'].map(f => (
+                        <li key={f} className="flex items-start gap-2 text-[10px] font-mono text-[#A19FA3]">
+                          <i className="fa-solid fa-star text-[#FFC107] mt-0.5 shrink-0"></i>{f}
+                        </li>
+                      ))}
+                    </ul>
+                    {(planInfo?.currentPlan || user?.plan) === 'premium' ? (
+                      <div className="mt-4 text-[9px] font-mono text-[#FFC107] font-bold uppercase text-center border border-[#FFC107] py-1">Active Plan ⭐</div>
+                    ) : user ? (
+                      <button
+                        onClick={handleUpgradePlan}
+                        disabled={upgrading}
+                        className="w-full mt-4 bg-[#FFC107] hover:bg-[#ffd23f] text-black font-extrabold py-2.5 uppercase font-mono text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all disabled:opacity-60"
+                      >
+                        {upgrading ? 'Processing...' : '⚡ Upgrade Now'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setShowAuthModal(true); setAuthMode('login'); setAuthMsg(null); }}
+                        className="w-full mt-4 bg-[#FFC107] hover:bg-[#ffd23f] text-black font-extrabold py-2.5 uppercase font-mono text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all"
+                      >
+                        🔐 Login to Upgrade
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {!user && (
+                  <div className="mt-4 p-3 border-2 border-[#FFC107]/40 bg-[#FFC107]/5 text-[10px] font-mono text-[#FFC107] flex items-center gap-2">
+                    <i className="fa-solid fa-triangle-exclamation shrink-0"></i>
+                    Not logged in. <span className="font-bold underline cursor-pointer" onClick={() => { setShowAuthModal(true); setAuthMode('register'); setAuthMsg(null); }}>Create an account</span> to save your plan.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1648,10 +1696,14 @@ useEffect(() => {
                   </p>
                   <button
                     onClick={() => {
-                      if (window.confirm('Do you want to discard your crafted links and reset the inventory?')) {
-                        recentUrls.forEach(url => handleDelete(url.nnid));
-                        toast.success('Inventory chest cleared!');
-                      }
+                      setConfirmModal({
+                        msg: 'Clear your entire inventory chest? This cannot be undone.',
+                        onConfirm: () => {
+                          recentUrls.forEach(url => handleDelete(url.nnid));
+                          toast.success('Inventory chest cleared!');
+                          setConfirmModal(null);
+                        }
+                      });
                     }}
                     className="bg-[#FF8A80] hover:bg-[#ff9e94] text-black font-extrabold px-6 py-2 uppercase border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] transition-all font-mono text-xs"
                   >
@@ -1729,6 +1781,176 @@ useEffect(() => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Inline Auth Modal — shown on Login to Upgrade click */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowAuthModal(false); setAuthMsg(null); } }}>
+          <div className="bg-[#1c1b1e] border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] w-full max-w-md relative">
+            <button
+              onClick={() => { setShowAuthModal(false); setAuthMsg(null); }}
+              className="absolute top-4 right-4 text-[#A19FA3] hover:text-white font-mono text-xs uppercase"
+            >[Close]</button>
+
+            {/* Header */}
+            <div className="p-6 pb-0">
+              <h2 className="text-xl font-black font-mono tracking-wider text-white">
+                Craft<span className="text-[#5aa02c]">URL</span>
+              </h2>
+              <p className="text-[10px] font-mono text-[#A19FA3] mt-1 uppercase tracking-widest">Sign in to unlock premium features</p>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex mt-4 mx-6 border-2 border-black">
+              <button
+                onClick={() => { setAuthMode('login'); setAuthMsg(null); }}
+                className={`flex-1 py-2 font-mono text-xs font-bold uppercase tracking-wider transition-all ${
+                  authMode === 'login' ? 'bg-[#5aa02c] text-black' : 'bg-[#0b0a0c] text-[#A19FA3] hover:text-white'
+                }`}
+              >Login</button>
+              <button
+                onClick={() => { setAuthMode('register'); setAuthMsg(null); }}
+                className={`flex-1 py-2 font-mono text-xs font-bold uppercase tracking-wider border-l-2 border-black transition-all ${
+                  authMode === 'register' ? 'bg-[#5aa02c] text-black' : 'bg-[#0b0a0c] text-[#A19FA3] hover:text-white'
+                }`}
+              >Register</button>
+            </div>
+
+            <div className="p-6">
+              {/* Message Banner */}
+              {authMsg && (
+                <div className={`mb-4 p-3 border-2 flex items-start gap-2 font-mono text-xs ${
+                  authMsg.type === 'error'
+                    ? 'border-[#FF8A80] bg-[#FF8A80]/10 text-[#FF8A80]'
+                    : 'border-[#5aa02c] bg-[#5aa02c]/10 text-[#5aa02c]'
+                }`}>
+                  <i className={`fa-solid mt-0.5 shrink-0 ${authMsg.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'}`}></i>
+                  <span>{authMsg.text}</span>
+                </div>
+              )}
+
+              {/* Form */}
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setAuthMsg(null);
+                if (!authUsername.trim() || !authPassword.trim()) {
+                  setAuthMsg({ type: 'error', text: 'Please fill in all fields.' });
+                  return;
+                }
+                if (authMode === 'register' && authPassword.length < 6) {
+                  setAuthMsg({ type: 'error', text: 'Password must be at least 6 characters.' });
+                  return;
+                }
+                setAuthLoading(true);
+                try {
+                  const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+                  const res = await api.post(endpoint, { username: authUsername.trim(), password: authPassword });
+                  if (res.data.status === 'ok') {
+                    setUser(res.data.message);
+                    setShowAuthModal(false);
+                    setAuthUsername('');
+                    setAuthPassword('');
+                    setAuthMsg(null);
+                    toast.success(authMode === 'login' ? 'Welcome back, Crafter!' : 'Account created! Welcome!');
+                    fetchPlan();
+                  } else {
+                    setAuthMsg({ type: 'error', text: res.data.message || 'Something went wrong.' });
+                  }
+                } catch (err) {
+                  setAuthMsg({ type: 'error', text: err.response?.data?.message || 'Server error. Try again.' });
+                } finally {
+                  setAuthLoading(false);
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-mono text-[#A19FA3] uppercase tracking-wider mb-1.5">Username</label>
+                  <input
+                    type="text"
+                    value={authUsername}
+                    onChange={e => { setAuthUsername(e.target.value); setAuthMsg(null); }}
+                    placeholder="Enter username..."
+                    autoComplete="username"
+                    className="w-full bg-[#0b0a0c] border-2 border-black p-3 text-white font-mono text-sm focus:outline-none focus:border-[#5aa02c] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.8)] placeholder-[#A19FA3]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-[#A19FA3] uppercase tracking-wider mb-1.5">Password</label>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={e => { setAuthPassword(e.target.value); setAuthMsg(null); }}
+                    placeholder="••••••••"
+                    autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+                    className="w-full bg-[#0b0a0c] border-2 border-black p-3 text-white font-mono text-sm focus:outline-none focus:border-[#5aa02c] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.8)] placeholder-[#A19FA3]"
+                  />
+                  {authMode === 'register' && <p className="text-[10px] text-[#A19FA3] font-mono mt-1">Minimum 6 characters.</p>}
+                </div>
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full bg-[#5aa02c] hover:bg-[#6cb835] text-black font-extrabold py-3 uppercase font-mono text-sm border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] transition-all disabled:opacity-60"
+                >
+                  {authLoading ? 'Please wait...' : authMode === 'login' ? '⚡ Login' : '🔨 Create Account'}
+                </button>
+              </form>
+
+              <div className="flex items-center my-4 gap-3">
+                <div className="flex-1 h-px bg-[#262428]"></div>
+                <span className="text-[10px] font-mono text-[#A19FA3] uppercase">or</span>
+                <div className="flex-1 h-px bg-[#262428]"></div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  setAuthLoading(true);
+                  try {
+                    const res = await api.post('/api/auth/guest');
+                    if (res.data.status === 'ok') {
+                      setUser(res.data.message);
+                      setShowAuthModal(false);
+                      setAuthMsg(null);
+                      toast.success('Joined as Guest Crafter!');
+                    } else {
+                      setAuthMsg({ type: 'error', text: res.data.message || 'Guest login failed.' });
+                    }
+                  } catch (err) {
+                    setAuthMsg({ type: 'error', text: 'Could not start guest session.' });
+                  } finally {
+                    setAuthLoading(false);
+                  }
+                }}
+                disabled={authLoading}
+                className="w-full bg-[#0b0a0c] hover:bg-[#262428] text-[#A19FA3] hover:text-white font-bold py-2.5 uppercase font-mono text-xs border-2 border-[#262428] hover:border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all disabled:opacity-60"
+              >
+                <i className="fa-solid fa-user-secret mr-2"></i>Continue as Guest
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1c1b1e] border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-w-md w-full">
+            <div className="text-[#FF8A80] text-3xl mb-4">⚠️</div>
+            <h3 className="font-mono font-extrabold text-white uppercase text-base mb-3">Confirm Action</h3>
+            <p className="text-sm font-mono text-[#A19FA3] mb-6">{confirmModal.msg}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmModal.onConfirm}
+                className="flex-1 bg-[#FF8A80] text-black font-extrabold py-2.5 uppercase font-mono text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="flex-1 bg-[#262428] text-[#A19FA3] hover:text-white font-extrabold py-2.5 uppercase font-mono text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] transition-all"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

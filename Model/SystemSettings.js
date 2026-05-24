@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const systemSettingsSchema = mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: false // legacy support
+    },
     rateLimit: {
         type: Number,
         default: 1000

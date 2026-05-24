@@ -4,19 +4,19 @@ const { success, error } = require("../Utils/ResponseWrapper");
 const { nanoid } = require('nanoid');
 
 const getUrlShortnerController = async (req, res) => {
-  console.log("inside the controller")
   try {
     const nnid = nanoid(8);
     const { url, name } = req.body;
     if (!url) {
-      return res.send(error(401, 'url is require'));
+      return res.send(error(401, 'URL is required'));
     }
     const result = await Url.create({
       url,
       name: name || 'website',
       nnid,
       clicks: 0,
-      clicksHistory: []
+      clicksHistory: [],
+      userId: req.user ? req.user.id : null
     });
     return res.send(success(200, result));
   } catch (e) {
@@ -26,7 +26,6 @@ const getUrlShortnerController = async (req, res) => {
 
 const getOriginalUrlController = async (req, res) => {
   try {
-    console.log("inside the  get controller controller,",req)
     const nnid = req.params.id;
     if (!nnid) {
       return res.send(error(401, 'Invalid url'));
@@ -36,23 +35,22 @@ const getOriginalUrlController = async (req, res) => {
       return res.send(error(404, 'Url not found'));
     }
 
-    // Capture visitor metadata
     const userAgent = req.headers['user-agent'] || '';
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const referer = req.headers['referer'] || req.headers['referrer'] || '';
 
-    // Device Enchantment parser
+    // Device parser
     let deviceType = 'Desktop';
     if (/mobile/i.test(userAgent)) deviceType = 'Mobile';
     else if (/tablet|ipad/i.test(userAgent)) deviceType = 'Tablet';
     else if (/console|nintendo|playstation|xbox/i.test(userAgent)) deviceType = 'Misc';
 
-    // Mob Spawner parser
+    // Referrer parser
     let referrerSource = 'Direct Connect';
     if (/google|bing|yahoo|baidu/i.test(referer)) referrerSource = 'Search Explorers';
     else if (/facebook|twitter|instagram|reddit|linkedin|t\.co/i.test(referer)) referrerSource = 'Social Spawners';
 
-    // Biome selector
+    // Country via IP
     const countries = ['United Realms', 'Euro-Spawners', 'Asian Biomes'];
     let countryIdx = 0;
     if (ip) {
@@ -62,19 +60,10 @@ const getOriginalUrlController = async (req, res) => {
     }
     const country = countries[countryIdx];
 
-    // Push log & increment click counter
     urlDoc.clicks = (urlDoc.clicks || 0) + 1;
-    urlDoc.clicksHistory.push({
-      userAgent,
-      deviceType,
-      country,
-      referrer: referrerSource,
-      ip
-    });
-
+    urlDoc.clicksHistory.push({ userAgent, deviceType, country, referrer: referrerSource, ip });
     await urlDoc.save();
 
-    // Save detailed event to dedicated Analytics collection
     await Analytics.create({
       urlId: urlDoc._id,
       nnid: urlDoc.nnid,
@@ -85,7 +74,6 @@ const getOriginalUrlController = async (req, res) => {
       ip
     });
 
-    // Redirect to original URL
     return res.redirect(urlDoc.url);
   } catch (e) {
     return res.send(error(500, e.message));
@@ -94,7 +82,9 @@ const getOriginalUrlController = async (req, res) => {
 
 const getRecentUrlsController = async (req, res) => {
   try {
-    const urls = await Url.find().sort({ createdAt: -1 }).limit(15);
+    // If logged in: show only this user's URLs. Otherwise show all public (no-user) URLs.
+    const query = req.user ? { userId: req.user.id } : { userId: null };
+    const urls = await Url.find(query).sort({ createdAt: -1 }).limit(50);
     return res.send(success(200, urls));
   } catch (e) {
     return res.send(error(500, e.message));
@@ -104,9 +94,9 @@ const getRecentUrlsController = async (req, res) => {
 const deleteUrlController = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await Url.findOneAndDelete({ nnid: id });
+    const deleted = await Url.findOneAndDelete({ nnid: id, userId: req.user.id });
     if (!deleted) {
-      return res.send(error(404, 'URL not found'));
+      return res.send(error(404, 'URL not found or unauthorized'));
     }
     return res.send(success(200, 'URL deleted successfully'));
   } catch (e) {
@@ -116,7 +106,8 @@ const deleteUrlController = async (req, res) => {
 
 const getGlobalStatsController = async (req, res) => {
   try {
-    const urls = await Url.find({});
+    const query = req.user ? { userId: req.user.id } : { userId: null };
+    const urls = await Url.find(query);
     let totalClicks = 0;
     let uniqueIps = new Set();
 
@@ -150,6 +141,7 @@ const getGlobalStatsController = async (req, res) => {
     return res.send(success(200, {
       totalClicks,
       uniquePlayers: uniqueIps.size,
+      totalUrls: urls.length,
       devices,
       biomes,
       referrers,

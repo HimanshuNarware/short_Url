@@ -4,20 +4,13 @@ const {
     updateProfileController,
     getSystemSettingsController,
     updateSystemSettingsController,
-    getApiKeysController,
-    createApiKeyController,
-    deleteApiKeyController
 } = require('../Controller/SettingsController');
+const optionalAuth = require('../middleware/optionalAuth');
 
-router.get('/profile', getProfileController);
-router.put('/profile', updateProfileController);
+router.get('/profile', optionalAuth, getProfileController);
+router.put('/profile', optionalAuth, updateProfileController);
 
-router.get('/system', getSystemSettingsController);
-router.put('/system', updateSystemSettingsController);
-
-router.get('/keys', getApiKeysController);
-router.post('/keys', createApiKeyController);
-router.delete('/keys/:id', deleteApiKeyController);
+router.get('/system', optionalAuth, getSystemSettingsController);
+router.put('/system', optionalAuth, updateSystemSettingsController);
 
 module.exports = router;
-    

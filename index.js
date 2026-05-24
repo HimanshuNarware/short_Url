@@ -1,31 +1,38 @@
-const express= require('express');
-const {success} =require('./Utils/ResponseWrapper')
-const dotenv= require('dotenv');
-const connectDB= require('./DbConnect')
-dotenv.config(path='./.env')
-const Api = require(`./Router/Api`);
+const express = require('express');
+const { success } = require('./Utils/ResponseWrapper');
+const dotenv = require('dotenv');
+const connectDB = require('./DbConnect');
+dotenv.config({ path: './.env' });
+
+const Api = require('./Router/Api');
 const morgan = require('morgan');
-const cors=require('cors');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const { getOriginalUrlController } = require('./Controller/UrlController');
 
-// middleware and router
 const app = express();
-// app.use(morgan('common'))
+
+// Middleware
 app.use(express.json());
+app.use(cookieParser());
 app.use(cors({
-    origin:"https://short-url-tau-rose.vercel.app"
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true // Required for cookies to be sent cross-origin
 }));
 
-app.get('/',(req,res)=>{
-    res.send('Home url page')
-})
-app.use('/api',Api);
+// Routes
+app.get('/', (req, res) => {
+    res.send(success(200, 'CraftURL Server is running.'));
+});
 
-app.get('/:id',getOriginalUrlController)
+app.use('/api', Api);
 
-const port= process.env.PORT || 4000
+// Short URL redirect (public — no auth required)
+app.get('/:id', getOriginalUrlController);
+
+const port = process.env.PORT || 4000;
 connectDB();
 
-app.listen(port,()=>{
-    console.log(`server is runnning of the port${port}`)
-})
+app.listen(port, () => {
+    console.log(`CraftURL server running on port ${port}`);
+});
