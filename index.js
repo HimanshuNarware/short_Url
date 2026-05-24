@@ -10,7 +10,7 @@ const { getOriginalUrlController } = require('./Controller/UrlController');
 
 // middleware and router
 const app = express();
-app.use(morgan('combined'))
+// app.use(morgan('common'))
 app.use(express.json());
 app.use(cors());
 

@@ -3,7 +3,7 @@ const mongoose= require('mongoose');
 
 module.exports= async ()=>{
     try{
-  const uri=process.env.MONGOURL;
+  const uri=process.env.MONGOURL ||"mongodb://localhost:27017/";
       const connect= await mongoose.connect(uri)
         console.log('connnected to ', connect.connection.host);
     }catch(e){
