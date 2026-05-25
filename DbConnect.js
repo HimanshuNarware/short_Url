@@ -3,11 +3,13 @@ const mongoose= require('mongoose');
 
 module.exports= async ()=>{
     try{
-  const uri=process.env.MONGOURL ||"mongodb://localhost:27017/";
+
+  const uri=process.env.MONGOURL ;
+  console.log(uri);
       const connect= await mongoose.connect(uri)
         console.log('connnected to ', connect.connection.host);
     }catch(e){
-        console.log(e,'unable to connect to server')
+        console.log(e,'unable to connect to server',)
         process.exit(1);
     }
 }
