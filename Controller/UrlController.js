@@ -5,15 +5,29 @@ const { nanoid } = require('nanoid');
 
 const getUrlShortnerController = async (req, res) => {
   try {
-    const nnid = nanoid(8);
-    const { url, name } = req.body;
+    const { url, name, customAlias, maxClicks, expiresAt } = req.body;
     if (!url) {
       return res.send(error(401, 'URL is required'));
     }
+    
+    let nnid = nanoid(8);
+    if (customAlias) {
+      if (!req.user) {
+        return res.send(error(401, 'Login required for custom alias'));
+      }
+      const existing = await Url.findOne({ nnid: customAlias });
+      if (existing) {
+        return res.send(error(400, 'Custom alias already in use'));
+      }
+      nnid = customAlias;
+    }
+
     const result = await Url.create({
       url,
       name: name || 'website',
       nnid,
+      maxClicks: maxClicks ? parseInt(maxClicks) : null,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
       clicks: 0,
       clicksHistory: [],
       userId: req.user ? req.user.id : null
@@ -33,6 +47,16 @@ const getOriginalUrlController = async (req, res) => {
     const urlDoc = await Url.findOne({ nnid });
     if (!urlDoc) {
       return res.send(error(404, 'Url not found'));
+    }
+
+    if (urlDoc.expiresAt && new Date() > new Date(urlDoc.expiresAt)) {
+      return res.send(error(410, 'This URL has expired'));
+    }
+
+    if (urlDoc.maxClicks !== null && urlDoc.maxClicks !== undefined) {
+      if (urlDoc.clicks >= urlDoc.maxClicks) {
+        return res.send(error(410, 'This URL has reached its maximum click limit'));
+      }
     }
 
     const userAgent = req.headers['user-agent'] || '';

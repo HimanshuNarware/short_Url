@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import Footer from './Footer';
 import './home.css';
@@ -17,6 +17,13 @@ function Home({ user, setUser, api }) {
 
   // Access control & Modal state
   const [isCraftModalOpen, setIsCraftModalOpen] = useState(false);
+  const [craftForm, setCraftForm] = useState({
+    url: '',
+    customAlias: '',
+    maxClicks: '',
+    expiresAt: ''
+  });
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
 
   // Cycle toggle in click trends
   const [cycleTab, setCycleTab] = useState('7cycles');
@@ -199,10 +206,10 @@ function Home({ user, setUser, api }) {
     return () => clearInterval(timer);
   }, [activeTab]);
 
-  async function handleCraft(e, inputRef) {
+  async function handleCraft(e) {
     e.preventDefault();
-    const inputValue = inputRef.current?.value;
-    if (!inputValue) {
+    const { url, customAlias, maxClicks, expiresAt } = craftForm;
+    if (!url) {
       toast.error('Please enter a URL');
       return;
     }
@@ -211,8 +218,11 @@ function Home({ user, setUser, api }) {
 
     try {
       const response = await api.post(`/api/url/`, {
-        url: inputValue,
+        url,
         name: 'website',
+        customAlias: customAlias || undefined,
+        maxClicks: maxClicks || undefined,
+        expiresAt: expiresAt || undefined,
       });
 
       if (response.data.status === 'failed') {
@@ -227,8 +237,9 @@ function Home({ user, setUser, api }) {
 
       const shortUrl = (process.env.REACT_APP_BACKEND_URL || window.location.origin) + '/' + response.data.message.nnid;
       setResult(shortUrl);
-      toast.success('URL shortened successfully!');
-      if (inputRef.current) inputRef.current.value = '';
+      setQrCodeDataUrl('');
+      toast.success('URL crafted successfully!');
+      setCraftForm({ url: '', customAlias: '', maxClicks: '', expiresAt: '' });
       refreshAll();
     } catch (e) {
       toast.error('Error shortening URL');
@@ -237,6 +248,20 @@ function Home({ user, setUser, api }) {
       setIsLoading(false);
     }
   }
+
+  const generateQRCode = async () => {
+    if (!result) {
+      toast.error('Please craft a URL first to generate QR Code');
+      return;
+    }
+    try {
+      const url = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result)}&bgcolor=141315&color=ffffff&margin=10`;
+      setQrCodeDataUrl(url);
+      toast.success('QR Code Generated!');
+    } catch (err) {
+      toast.error('Failed to generate QR Code');
+    }
+  };
 
   const handleCopy = async (urlToCopy) => {
     const textToCopy = urlToCopy || result;
@@ -504,7 +529,7 @@ function Home({ user, setUser, api }) {
             onClick={() => setIsCraftModalOpen(true)}
             className="w-full bg-[#5aa02c] text-black font-extrabold p-3 border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] uppercase text-center hover:bg-[#6cb835] active:translate-y-[2px] transition-all mb-6 font-mono text-sm block"
           >
-            + Craft New Link
+            + Create Custom URL
           </button>
 
           {/* Navigation Menu */}
@@ -636,26 +661,34 @@ function Home({ user, setUser, api }) {
               <section className="bg-[#1c1b1e] border-4 border-black p-8 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none checkerboard-bg"></div>
 
-                <h2 className="text-3xl font-extrabold tracking-wider text-white mb-2 font-mono">
-                  CRAFT NEW LINK
+                <h2 className="text-3xl font-extrabold tracking-wider text-white mb-2 font-mono uppercase">
+                  CREATE CUSTOM URL
                 </h2>
                 <p className="text-sm text-[#A19FA3] mb-6 max-w-xl mx-auto">
                   Combine your long URL with our magical pixels to create a legendary shortcut.
                 </p>
 
                 {/* Shortener Form */}
-                <form onSubmit={(e) => handleCraft(e, ref)} className="max-w-3xl mx-auto">
+                <form onSubmit={handleCraft} className="max-w-3xl mx-auto text-left">
                   <div className="flex flex-col sm:flex-row bg-[#0b0a0c] border-4 border-black p-1 shadow-[inset_3px_3px_0px_rgba(0,0,0,0.8)]">
                     <div className="flex items-center flex-1 min-w-0">
                       <i className="fa-solid fa-link text-[#5aa02c] text-lg px-4"></i>
                       <input
                         type="url"
-                        ref={ref}
+                        value={craftForm.url}
+                        onChange={(e) => setCraftForm({ ...craftForm, url: e.target.value })}
                         required
                         placeholder="Enter long URL to craft..."
                         className="flex-1 bg-transparent border-none outline-none py-3 text-white placeholder-[#A19FA3] font-mono text-sm sm:text-base min-w-0"
                       />
                     </div>
+                    <button
+                      type="button"
+                      onClick={generateQRCode}
+                      className="bg-[#376974] text-white font-extrabold text-base px-4 py-3 uppercase border-t-4 sm:border-t-0 sm:border-l-4 border-black hover:bg-[#43818e] active:translate-y-[2px] transition-all shrink-0 font-mono"
+                    >
+                      <i className="fa-solid fa-qrcode mr-2"></i> QR Code
+                    </button>
                     <button
                       type="submit"
                       disabled={isLoading}
@@ -663,6 +696,56 @@ function Home({ user, setUser, api }) {
                     >
                       {isLoading ? 'Crafting...' : 'Craft'}
                     </button>
+                  </div>
+
+                  {/* Advanced Settings */}
+                  <div className="mt-4 text-left border-4 border-[#262428] bg-[#141315] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <h3 className="text-sm font-bold font-mono text-[#A19FA3] uppercase tracking-wider mb-4">Advanced Settings</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Rate limiting */}
+                      <div>
+                        <label className="block text-xs font-mono text-[#A19FA3] mb-1">Rate limiting (Max clicks)</label>
+                        <input
+                          type="number"
+                          value={craftForm.maxClicks}
+                          onChange={(e) => setCraftForm({ ...craftForm, maxClicks: e.target.value })}
+                          placeholder="e.g. 100"
+                          className="w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c]"
+                        />
+                      </div>
+
+                      {/* Expiration time */}
+                      <div>
+                        <label className="block text-xs font-mono text-[#A19FA3] mb-1">Set URL expire time</label>
+                        <input
+                          type="datetime-local"
+                          value={craftForm.expiresAt}
+                          onChange={(e) => setCraftForm({ ...craftForm, expiresAt: e.target.value })}
+                          className="w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c] custom-datetime"
+                        />
+                      </div>
+
+                      {/* Custom Alias */}
+                      <div>
+                        <label className="block text-xs font-mono text-[#A19FA3] mb-1">Customised URL (Alias)</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={craftForm.customAlias}
+                            onChange={(e) => setCraftForm({ ...craftForm, customAlias: e.target.value })}
+                            placeholder="e.g. my-cool-link"
+                            disabled={!user}
+                            className={`w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c] ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          />
+                          {!user && (
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#FFC107] text-xs" title="Login Required">
+                              <i className="fa-solid fa-lock"></i>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </form>
 
@@ -686,6 +769,17 @@ function Home({ user, setUser, api }) {
                     >
                       <i className="fa-regular fa-copy mr-1"></i> Copy Link
                     </button>
+                  </div>
+                )}
+
+                {/* QR Code Output */}
+                {qrCodeDataUrl && (
+                  <div className="mt-4 p-4 bg-[#0b0a0c] border-2 border-[#376974] max-w-2xl mx-auto flex flex-col items-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-slide-up">
+                    <h3 className="text-white font-mono text-xs mb-2">SCAN TO ACCESS</h3>
+                    <img src={qrCodeDataUrl} alt="QR Code" className="w-32 h-32 border-4 border-white pixelated" />
+                    <a href={qrCodeDataUrl} download="crafturl-qr.png" className="mt-3 text-[#00BCD4] hover:text-white font-mono text-xs flex items-center gap-1">
+                      <i className="fa-solid fa-download"></i> Download QR
+                    </a>
                   </div>
                 )}
               </section>
@@ -1731,25 +1825,33 @@ function Home({ user, setUser, api }) {
             >
               [Close]
             </button>
-            <h2 className="text-2xl font-extrabold tracking-wider text-white mb-2 font-mono">
-              CRAFT NEW LINK
+            <h2 className="text-2xl font-extrabold tracking-wider text-white mb-2 font-mono uppercase">
+              CREATE CUSTOM URL
             </h2>
             <p className="text-xs text-[#A19FA3] mb-6">
               Combine your long URL with our magical pixels to create a legendary shortcut.
             </p>
 
-            <form onSubmit={(e) => handleCraft(e, modalRef)} className="space-y-4">
+            <form onSubmit={handleCraft} className="space-y-4 text-left">
               <div className="flex flex-col sm:flex-row bg-[#0b0a0c] border-4 border-black p-1 shadow-[inset_3px_3px_0px_rgba(0,0,0,0.8)]">
                 <div className="flex items-center flex-1 min-w-0">
                   <i className="fa-solid fa-link text-[#5aa02c] text-lg px-4"></i>
                   <input
                     type="url"
-                    ref={modalRef}
+                    value={craftForm.url}
+                    onChange={(e) => setCraftForm({ ...craftForm, url: e.target.value })}
                     required
                     placeholder="Enter long URL to craft..."
                     className="flex-1 bg-transparent border-none outline-none py-3 text-white placeholder-[#A19FA3] font-mono text-sm min-w-0"
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={generateQRCode}
+                  className="bg-[#376974] text-white font-extrabold text-sm px-4 py-3 uppercase border-t-4 sm:border-t-0 sm:border-l-4 border-black hover:bg-[#43818e] active:translate-y-[2px] transition-all shrink-0 font-mono"
+                >
+                  <i className="fa-solid fa-qrcode"></i>
+                </button>
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -1757,6 +1859,53 @@ function Home({ user, setUser, api }) {
                 >
                   {isLoading ? 'Crafting...' : 'Craft'}
                 </button>
+              </div>
+
+              {/* Advanced Settings */}
+              <div className="mt-4 text-left border-4 border-[#262428] bg-[#141315] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <h3 className="text-sm font-bold font-mono text-[#A19FA3] uppercase tracking-wider mb-4">Advanced Settings</h3>
+                
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-mono text-[#A19FA3] mb-1">Rate limiting (Max clicks)</label>
+                    <input
+                      type="number"
+                      value={craftForm.maxClicks}
+                      onChange={(e) => setCraftForm({ ...craftForm, maxClicks: e.target.value })}
+                      placeholder="e.g. 100"
+                      className="w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-[#A19FA3] mb-1">Set URL expire time</label>
+                    <input
+                      type="datetime-local"
+                      value={craftForm.expiresAt}
+                      onChange={(e) => setCraftForm({ ...craftForm, expiresAt: e.target.value })}
+                      className="w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-mono text-[#A19FA3] mb-1">Customised URL (Alias)</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={craftForm.customAlias}
+                        onChange={(e) => setCraftForm({ ...craftForm, customAlias: e.target.value })}
+                        placeholder="e.g. my-cool-link"
+                        disabled={!user}
+                        className={`w-full bg-[#0b0a0c] border-2 border-black p-2 text-white placeholder-[#A19FA3] font-mono text-sm focus:outline-none focus:border-[#5aa02c] ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      />
+                      {!user && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[#FFC107] text-xs" title="Login Required">
+                          <i className="fa-solid fa-lock"></i>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </form>
 
@@ -1779,6 +1928,17 @@ function Home({ user, setUser, api }) {
                 >
                   Copy Link
                 </button>
+              </div>
+            )}
+            
+            {/* QR Code Output */}
+            {qrCodeDataUrl && (
+              <div className="mt-4 p-4 bg-[#0b0a0c] border-2 border-[#376974] flex flex-col items-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-slide-up">
+                <h3 className="text-white font-mono text-xs mb-2">SCAN TO ACCESS</h3>
+                <img src={qrCodeDataUrl} alt="QR Code" className="w-32 h-32 border-4 border-white pixelated" />
+                <a href={qrCodeDataUrl} download="crafturl-qr.png" className="mt-3 text-[#00BCD4] hover:text-white font-mono text-xs flex items-center gap-1">
+                  <i className="fa-solid fa-download"></i> Download QR
+                </a>
               </div>
             )}
           </div>

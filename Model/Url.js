@@ -25,6 +25,14 @@ const urlSchema = mongoose.Schema({
         required: true,
         unique: true
     },
+    maxClicks: {
+        type: Number,
+        default: null
+    },
+    expiresAt: {
+        type: Date,
+        default: null
+    },
     clicks: {
         type: Number,
         default: 0
