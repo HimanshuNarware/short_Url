@@ -106,10 +106,12 @@ const getOriginalUrlController = async (req, res) => {
 
 const getRecentUrlsController = async (req, res) => {
   try {
-    // If logged in: show only this user's URLs. Otherwise show all public (no-user) URLs.
-    const query = req.user ? { userId: req.user.id } : { userId: null };
-    const urls = await Url.find(query).sort({ createdAt: -1 }).limit(50);
-    return res.send(success(200, urls));
+    // If logged in and not a guest, return user-specific URLs. Otherwise return empty list.
+    if (req.user && !req.user.isGuest) {
+      const urls = await Url.find({ userId: req.user.id }).sort({ createdAt: -1 }).limit(50);
+      return res.send(success(200, urls));
+    }
+    return res.send(success(200, []));
   } catch (e) {
     return res.send(error(500, e.message));
   }
@@ -118,7 +120,8 @@ const getRecentUrlsController = async (req, res) => {
 const deleteUrlController = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await Url.findOneAndDelete({ nnid: id, userId: req.user.id });
+    const query = req.user ? { nnid: id, userId: req.user.id } : { nnid: id, userId: null };
+    const deleted = await Url.findOneAndDelete(query);
     if (!deleted) {
       return res.send(error(404, 'URL not found or unauthorized'));
     }

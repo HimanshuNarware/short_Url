@@ -10,10 +10,21 @@ function Home({ user, setUser, api }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentUrls, setRecentUrls] = useState([]);
   const [profile, setProfile] = useState({
-    name: 'Himanshu',
+    name: 'User',
     level: 1,
-    avatar: '👨‍🌾',
+    avatar: '👨',
   });
+
+  const [totalCrafted, setTotalCrafted] = useState(0);
+
+  useEffect(() => {
+    try {
+      const localUrls = JSON.parse(localStorage.getItem('crafturl_local_urls') || '[]');
+      setTotalCrafted(localUrls.length);
+    } catch (_) {
+      setTotalCrafted(0);
+    }
+  }, [recentUrls]);
 
   // Access control & Modal state
   const [isCraftModalOpen, setIsCraftModalOpen] = useState(false);
@@ -138,13 +149,23 @@ function Home({ user, setUser, api }) {
   };
 
   const fetchRecentUrls = async () => {
-    try {
-      const response = await api.get(`/api/url/recent`);
-      if (response.data.status === 'ok') {
-        setRecentUrls(response.data.message || []);
+    if (!user || user.isGuest) {
+      try {
+        const localUrls = JSON.parse(localStorage.getItem('crafturl_local_urls') || '[]');
+        setRecentUrls(localUrls);
+      } catch (err) {
+        console.error('Error reading localStorage:', err);
+        setRecentUrls([]);
       }
-    } catch (err) {
-      console.error('Error fetching recent URLs:', err);
+    } else {
+      try {
+        const response = await api.get(`/api/url/recent`);
+        if (response.data.status === 'ok') {
+          setRecentUrls(response.data.message || []);
+        }
+      } catch (err) {
+        console.error('Error fetching recent URLs:', err);
+      }
     }
   };
 
@@ -175,17 +196,15 @@ function Home({ user, setUser, api }) {
   };
 
   useEffect(() => {
-    fetchRecentUrls();
-    fetchStats();
-    fetchProfile();
-    fetchSystemSettings();
-    fetchPlan();
+    refreshAll();
     // Seed profile name from user token if available
     if (user && user.username) {
-      setProfile(prev => ({ ...prev, name: prev.name === 'Himanshu' ? user.username : prev.name }));
+      setProfile(prev => ({ ...prev, name: prev.name === 'Himanshu' || prev.name === 'Guest' ? user.username : prev.name }));
+    } else {
+      setProfile(prev => ({ ...prev, name: 'Guest' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
  
   // Set up periodic logs to make the terminal look active
   useEffect(() => {
@@ -214,11 +233,33 @@ function Home({ user, setUser, api }) {
       return;
     }
 
+    let normalizedUrl = url.trim();
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+
+    const isValidUrl = (str) => {
+      try {
+        const parsed = new URL(str);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+        const host = parsed.hostname;
+        if (host === 'localhost') return true;
+        return host.includes('.');
+      } catch (_) {
+        return false;
+      }
+    };
+
+    if (!isValidUrl(normalizedUrl)) {
+      toast.error('Please enter a valid URL (e.g., google.com or https://example.com)');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const response = await api.post(`/api/url/`, {
-        url,
+        url: normalizedUrl,
         name: 'website',
         customAlias: customAlias || undefined,
         maxClicks: maxClicks || undefined,
@@ -233,6 +274,15 @@ function Home({ user, setUser, api }) {
       if (!response.data.message?.nnid) {
         toast.error('Invalid response from server');
         return;
+      }
+
+      // Save to localStorage
+      try {
+        const localUrls = JSON.parse(localStorage.getItem('crafturl_local_urls') || '[]');
+        localUrls.unshift(response.data.message);
+        localStorage.setItem('crafturl_local_urls', JSON.stringify(localUrls.slice(0, 100)));
+      } catch (err) {
+        console.error('Error saving to localStorage:', err);
       }
 
       const shortUrl = (process.env.REACT_APP_BACKEND_URL || window.location.origin) + '/' + response.data.message.nnid;
@@ -254,6 +304,24 @@ function Home({ user, setUser, api }) {
       toast.error('Please craft a URL first to generate QR Code');
       return;
     }
+
+    const isValidUrl = (str) => {
+      try {
+        const parsed = new URL(str);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+        const host = parsed.hostname;
+        if (host === 'localhost') return true;
+        return host.includes('.');
+      } catch (_) {
+        return false;
+      }
+    };
+
+    if (!isValidUrl(result)) {
+      toast.error('Cannot generate QR Code for an invalid URL');
+      return;
+    }
+
     try {
       const url = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result)}&bgcolor=141315&color=ffffff&margin=10`;
       setQrCodeDataUrl(url);
@@ -276,16 +344,26 @@ function Home({ user, setUser, api }) {
 
   const handleDelete = async (nnid) => {
     try {
+      // Remove from localStorage
+      try {
+        const localUrls = JSON.parse(localStorage.getItem('crafturl_local_urls') || '[]');
+        const updated = localUrls.filter(u => u.nnid !== nnid);
+        localStorage.setItem('crafturl_local_urls', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error deleting from localStorage:', err);
+      }
+
       const response = await api.delete(`/api/url/${nnid}`);
       if (response.data.status === 'ok') {
         toast.success('URL deleted successfully');
-        refreshAll();
         if (result.endsWith(nnid)) setResult('');
       } else {
-        toast.error('Failed to delete URL');
+        toast.error('Failed to delete URL from database');
       }
+      refreshAll();
     } catch (error) {
-      toast.error('Error deleting URL');
+      // In case of error, still refresh UI to sync localStorage changes
+      refreshAll();
     }
   };
 
@@ -297,9 +375,15 @@ function Home({ user, setUser, api }) {
     setConfirmModal({
       msg: 'Mass delete ALL URLs from the chest? This cannot be undone.',
       onConfirm: () => {
-        recentUrls.forEach(url => handleDelete(url.nnid));
+        // Clear local storage
+        localStorage.removeItem('crafturl_local_urls');
+        // Delete each from database/backend
+        recentUrls.forEach(url => {
+          api.delete(`/api/url/${url.nnid}`).catch(() => {});
+        });
         toast.success('Cleared all items!');
         setConfirmModal(null);
+        refreshAll();
       }
     });
   };
@@ -515,7 +599,7 @@ function Home({ user, setUser, api }) {
             <div>
               <div className="font-bold text-sm text-white">{user?.username || profile.name}</div>
               <div className="text-[10px] text-[#A19FA3] font-mono">
-                Level {profile.level} Link Crafter
+                {totalCrafted} {totalCrafted === 1 ? 'Link' : 'Links'} Crafted
                 {user?.isGuest && <span className="ml-1 text-[#FFC107]">· GUEST</span>}
               </div>
               {(planInfo?.currentPlan || user?.plan) === 'premium' && (
@@ -674,7 +758,7 @@ function Home({ user, setUser, api }) {
                     <div className="flex items-center flex-1 min-w-0">
                       <i className="fa-solid fa-link text-[#5aa02c] text-lg px-4"></i>
                       <input
-                        type="url"
+                        type="text"
                         value={craftForm.url}
                         onChange={(e) => setCraftForm({ ...craftForm, url: e.target.value })}
                         required
@@ -1768,16 +1852,12 @@ function Home({ user, setUser, api }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-[#A19FA3] uppercase mb-1 font-mono">Crafter Level</label>
+                      <label className="block text-xs text-[#A19FA3] uppercase mb-1 font-mono">Total Links Crafted</label>
                       <input
                         type="number"
-                        value={profile.level}
-                        onChange={(e) => {
-                          const updated = { ...profile, level: Math.max(1, Number(e.target.value)) };
-                          setProfile(updated);
-                          saveProfile(updated);
-                        }}
-                        className="w-full bg-[#0b0a0c] border-2 border-black p-3 text-white font-mono focus:outline-none focus:border-[#5aa02c] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.8)]"
+                        value={totalCrafted}
+                        readOnly
+                        className="w-full bg-[#0b0a0c] border-2 border-black p-3 text-[#A19FA3] font-mono focus:outline-none shadow-[inset_2px_2px_0px_rgba(0,0,0,0.8)] cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -1837,7 +1917,7 @@ function Home({ user, setUser, api }) {
                 <div className="flex items-center flex-1 min-w-0">
                   <i className="fa-solid fa-link text-[#5aa02c] text-lg px-4"></i>
                   <input
-                    type="url"
+                    type="text"
                     value={craftForm.url}
                     onChange={(e) => setCraftForm({ ...craftForm, url: e.target.value })}
                     required
